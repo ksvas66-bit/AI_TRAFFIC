@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- ⭐ LOCKED STABLE LIBRARIES -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js"></script>
+
+<style>
+body{
+    text-align:center;
+    font-family:Arial;
+}
+video{
+    width:95%;
+    max-width:400px;
+    border-radius:10px;
+}
+button{
+    padding:15px;
+    font-size:18px;
+    margin-top:15px;
+}
+#label{
+    font-size:28px;
+    font-weight:bold;
+    color:green;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Traffic Sign AI</h2>
+
+<button onclick="startCamera()">START CAMERA</button>
+
+<br><br>
+
+<div id="webcam-container"></div>
+<div id="label">Prediction: NONE</div>
+
+<script>
+
+const URL = "https://teachablemachine.withgoogle.com/models/cWklwO1e4/";
+
+let model, webcam, maxPredictions;
+let lastCommand = "";
+const DELAY = 250; // ⭐ prevents bluetooth flooding
+
+async function startCamera() {
+
+    try{
+
+        const modelURL = URL + "model.json";
+        const metadataURL = URL + "metadata.json";
+
+        model = await tmImage.load(modelURL, metadataURL);
+        maxPredictions = model.getTotalClasses();
+
+        webcam = new tmImage.Webcam(350, 350, false); // ⭐ rear cam, no mirror
+        await webcam.setup({
+            facingMode: "environment"
+        });
+
+        await webcam.play();
+
+      const container = document.getElementById("webcam-container");
+container.innerHTML = "";   // ⭐ clears old frozen frames
+container.appendChild(webcam.canvas);
+
+
+        window.requestAnimationFrame(loop);
+
+    }catch(e){
+        alert("Camera Error - Restart App");
+        console.log(e);
+    }
+}
+
+async function loop(){
+    webcam.update();
+    await predict();
+    window.requestAnimationFrame(loop);
+}
+
+async function predict(){
+
+    const prediction = await model.predict(webcam.canvas);
+
+    let highestProb = 0;
+    let label = "NONE";
+
+    for(let i=0;i<maxPredictions;i++){
+
+        if(prediction[i].probability > highestProb){
+            highestProb = prediction[i].probability;
+            label = prediction[i].className;
+        }
+    }
+
+    document.getElementById("label").innerHTML =
+        "Prediction: " + label + " (" + highestProb.toFixed(2) + ")";
+
+    if(highestProb < 0.75) return;
+
+    let cmd = "";
+
+    const l = label.toUpperCase();
+
+    if(l.includes("STOP")) cmd="S";
+    else if(l.includes("LEFT")) cmd="L";
+    else if(l.includes("RIGHT")) cmd="R";
+    else if(l.includes("UTURN")) cmd="U";
+    else if(l.includes("ROUND")) cmd="O";
+    else return;
+
+    // ⭐ SEND ONLY IF NEW COMMAND
+    if(cmd !== lastCommand){
+
+        lastCommand = cmd;
+
+        if(window.AppInventor){
+            window.AppInventor.setWebViewString(cmd);
+        }
+
+        console.log("Sent:",cmd);
+
+        // ⭐ CRITICAL DELAY
+        await new Promise(r=>setTimeout(r,DELAY));
+    }
+}
+
+</script>
+
+</body>
+</html>
